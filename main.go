@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 func main() {
@@ -27,7 +30,7 @@ func main() {
 		defer outFile.Close()
 	}
 
-	if err = americanise(inFile, outfile); err != nil {
+	if err = americanise(inFile, outFile); err != nil {
 		log.Fatal(err)
 	}
 
@@ -35,7 +38,7 @@ func main() {
 
 func filenamesFromCommandLine() (inFilename, outFilename string, err error) {
 	if len(os.Args) > 1 && (os.Args[1] == "-h" || os.Args[1] == "--help") {
-		err = fmt.Errorf("usage: %s [<]infile.txt [>]outfule.txt",
+		err = fmt.Errorf("usage: %s [<]infile.txt [>]outfile.txt",
 			filepath.Base(os.Args[0]))
 		return "", "", err
 	}
@@ -46,7 +49,42 @@ func filenamesFromCommandLine() (inFilename, outFilename string, err error) {
 		}
 	}
 	if inFilename != "" && inFilename == outFilename {
-		log.Fatal("won't overwrite the infiel")
+		log.Fatal("won't overwrite the infile")
 	}
 	return inFilename, outFilename, nil
+}
+
+var britishAmerican = "british-american.txt"
+
+func americanise(inFile io.Reader, outFile io.Writer) (err error) {
+	reader := bufio.NewReader(inFile)
+	writer := bufio.NewWriter(outFile)
+	defer func() {
+		if err == nil {
+			err = writer.Flush()
+		}
+	}()
+	var replacer func(string) string
+	if replacer, err = makeReplacerFunction(britishAmerican); err != nil {
+		return err
+	}
+	wordRx := regexp.MustCompile("[A-Za-z]+")
+	eof := false
+	for !eof {
+		var line string
+		line, err = reader.ReadString('\n')
+		if err == io.EOF {
+			err = nil
+			eof = true
+		} else if err != nil {
+			return err
+		}
+		line = wordRx.ReplaceAllStringFunc(line, replacer)
+		if _, err = writer.WriteString(line); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
 }
